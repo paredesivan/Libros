@@ -48,7 +48,18 @@ function card(b){
   let status={reading:'Leyendo','to-read':'Por leer',finished:'Terminado'}[b.status]||'Por leer';
   let description=b.description?`<p class="book-description">${esc(b.description.slice(0,150))}${b.description.length>150?'…':''}</p>`:'';
 
-  return `<article class="book-card"><div>${cover(b)}</div><div class="book-info"><h3 class="book-title">${esc(b.title||'Sin título')}</h3><p class="book-author">${esc(b.author||'Autor desconocido')}</p><div class="book-meta">${esc(b.year||'s/f')} · ${esc(b.genre||'Sin género')}</div>${description}<span class="status-pill ${b.status==='finished'?'finished':''}">${status}</span>${b.pages?`<div class="progress"><i style="width:${pct}%"></i></div><div class="progress-text">pág. ${b.page||0} de ${b.pages}</div>`:''}<div class="card-actions"><button data-edit="${b.id}">Editar lectura</button><button class="favorite" data-fav="${b.id}" aria-label="Favorito">${b.favorite?'★':'☆'}</button></div></div></article>`
+  return `<article class="book-card"><div>${cover(b)}</div><div class="book-info"><h3 class="book-title">${esc(b.title||'Sin título')}</h3><p class="book-author">${esc(b.author||'Autor desconocido')}</p><div class="book-meta">${esc(b.year||'s/f')} · ${esc(b.genre||'Sin género')}</div>${description}<span class="status-pill ${b.status==='finished'?'finished':''}">${status}</span>${b.pages?`<div class="progress"><i style="width:${pct}%"></i></div><div class="progress-text">pág. ${b.page||0} de ${b.pages}</div>`:''}<div class="card-actions"><button data-edit="${b.id}">Editar lectura</button><button data-delete="${b.id}">Borrar</button><button class="favorite" data-fav="${b.id}" aria-label="Favorito">${b.favorite?'★':'☆'}</button></div></div></article>`
+}
+
+function deleteBook(id){
+  let b=books.find(x=>x.id===id);
+  if(!b)return;
+
+  if(confirm(`¿Borrar "${b.title}" de tu biblioteca?`)){
+    books=books.filter(x=>x.id!==id);
+    save();
+    showToast('Libro borrado.')
+  }
 }
 
 async function lookupISBN(raw){
@@ -62,7 +73,9 @@ async function lookupISBN(raw){
   setScannerStatus('Buscando datos del libro…');
 
   try{
-    let r=await fetch(`https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`);
+    let r=await fetch(
+      `https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`
+    );
 
     if(!r.ok)throw Error();
 
@@ -72,12 +85,16 @@ async function lookupISBN(raw){
 
     if(work?.key){
       try{
-        let wr=await fetch('https://openlibrary.org'+work.key+'.json');
+        let wr=await fetch(
+          'https://openlibrary.org'+work.key+'.json'
+        );
         if(wr.ok)wd=await wr.json()
       }catch{}
     }
 
-    let authors=(d.authors||[]).map(a=>a.name).filter(Boolean);
+    let authors=(d.authors||[])
+      .map(a=>a.name)
+      .filter(Boolean);
 
     if(!authors.length){
       authors=(wd.authors||[])
@@ -88,7 +105,9 @@ async function lookupISBN(raw){
       authors=await Promise.all(
         authors.map(async k=>{
           try{
-            let ar=await fetch('https://openlibrary.org'+k+'.json');
+            let ar=await fetch(
+              'https://openlibrary.org'+k+'.json'
+            );
             return (await ar.json()).name
           }catch{
             return ''
@@ -138,8 +157,54 @@ async function lookupISBN(raw){
     $('#bookDialog').showModal()
 
   }catch{
-    setScannerStatus('');
-    showToast('No encontramos ese ISBN. Podés revisar los números e intentar otra vez.')
+    try{
+      setScannerStatus('Open Library no lo encontró. Probando otra fuente…');
+      pendingBook=await lookupGoogleBooks(isbn);
+      showBookPreview();
+      closeDialog('scannerDialog');
+      $('#bookDialog').showModal()
+    }catch{
+      setScannerStatus('');
+      showToast('No encontramos ese ISBN en las fuentes consultadas.')
+    }
+  }
+}
+
+async function lookupGoogleBooks(isbn){
+  let r=await fetch(
+    `https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}&maxResults=5`
+  );
+
+  if(!r.ok)throw Error();
+
+  let data=await r.json();
+  let item=(data.items||[])[0];
+
+  if(!item?.volumeInfo)throw Error();
+
+  let v=item.volumeInfo;
+  let image=v.imageLinks?.thumbnail||v.imageLinks?.smallThumbnail||'';
+
+  return {
+    id:uid(),
+    isbn,
+    title:v.title||'Sin título',
+    author:(v.authors||[]).join(', ')||'Autor desconocido',
+    year:v.publishedDate?.match(/\d{4}/)?.[0]||'',
+    genre:v.categories?.[0]||'Sin género',
+    genres:v.categories||[],
+    description:String(v.description||'')
+      .replace(/<[^>]*>/g,'')
+      .replace(/\s+/g,' ')
+      .trim(),
+    pages:v.pageCount||0,
+    cover:image.replace(/^http:/,'https:'),
+    status:'to-read',
+    page:0,
+    notes:'',
+    favorite:false,
+    createdAt:Date.now(),
+    updatedAt:Date.now()
   }
 }
 
@@ -157,7 +222,9 @@ function showBookPreview(){
   `
 }
 
-function setScannerStatus(t){$('#scannerStatus').textContent=t}
+function setScannerStatus(t){
+  $('#scannerStatus').textContent=t
+}
 
 async function startScanner(){
   try{
@@ -215,9 +282,7 @@ function stopScanner(){
 
 function closeDialog(id){
   let d=document.getElementById(id);
-
   if(d.open)d.close();
-
   if(id==='scannerDialog')stopScanner()
 }
 
@@ -235,7 +300,6 @@ function savePending(andScan=false){
 
   books.unshift(pendingBook);
   pendingBook=null;
-
   save();
   closeDialog('bookDialog');
   showToast('Libro guardado en tu biblioteca.');
@@ -320,7 +384,6 @@ function renderRecommendations(searchText=''){
 
 function openEdit(id){
   let b=books.find(x=>x.id===id);
-
   if(!b)return;
 
   editingId=id;
@@ -331,7 +394,6 @@ function openEdit(id){
   $('#pageHint').textContent=b.pages?`de ${b.pages}`:'';
   $('#editFavorite').checked=!!b.favorite;
   $('#editNotes').value=b.notes||'';
-
   $('#editDialog').showModal()
 }
 
@@ -364,7 +426,6 @@ $('#importBtn').onclick=()=>{
 
 $('#importFile').onchange=e=>{
   let f=e.target.files[0];
-
   if(!f)return;
 
   let r=new FileReader();
@@ -372,7 +433,6 @@ $('#importFile').onchange=e=>{
   r.onload=()=>{
     try{
       let incoming=JSON.parse(r.result);
-
       if(!Array.isArray(incoming))throw Error();
 
       books=[
@@ -422,7 +482,6 @@ document.addEventListener('click',e=>{
   }
 
   let c=e.target.closest('[data-close]');
-
   if(c)closeDialog(c.dataset.close)
 });
 
@@ -458,5 +517,10 @@ function exportData(){
   URL.revokeObjectURL(a.href);
   showToast('Copia descargada.')
 }
+
+document.addEventListener('click',e=>{
+  let del=e.target.closest('[data-delete]');
+  if(del)deleteBook(del.dataset.delete)
+});
 
 render();
