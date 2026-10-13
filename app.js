@@ -1,5 +1,5 @@
 const STORE_KEY='mi-biblioteca-v1';
-let books=loadBooks(), activeFilter='all', pendingBook=null, editingId=null, stream=null, scanLock=false;
+let books=loadBooks(),activeFilter='all',pendingBook=null,editingId=null,stream=null,scanLock=false;
 
 const $=s=>document.querySelector(s);
 const $$=s=>[...document.querySelectorAll(s)];
@@ -87,6 +87,55 @@ function showToast(t){
   )
 }
 
+function clearManualInput(){
+  if($('#manualInput'))$('#manualInput').value=''
+}
+
+function clearLookupAlert(){
+  let x=$('#lookupAlert');
+
+  if(x){
+    x.hidden=true;
+    x.innerHTML=''
+  }
+}
+
+function cuspideSearchUrl(isbn){
+  return `https://cuspide.com/?s=${encodeURIComponent(isbn)}&post_type=product`
+}
+
+function showNotFound(isbn){
+  let x=$('#lookupAlert');
+
+  if(x){
+    x.hidden=false;
+
+    x.innerHTML=`
+      No encontramos el ISBN
+      <strong>${esc(isbn)}</strong>
+      en Open Library ni Google Books.
+
+      Podés buscarlo directamente en Cúspide:
+
+      <br>
+
+      <a
+        href="${cuspideSearchUrl(isbn)}"
+        target="_blank"
+        rel="noopener"
+      >
+        Buscar ${esc(isbn)} en Cúspide
+      </a>
+    `
+  }
+
+  setScannerStatus(
+    'No encontramos el libro en las fuentes automáticas.'
+  );
+
+  showToast('No encontramos ese ISBN.')
+}
+
 function coverSources(book){
   return [...new Set([
     book.cover,
@@ -123,6 +172,8 @@ function cover(book,cls='cover'){
 }
 
 async function coverFallback(img){
+  if(img.dataset.coverBusy==='1')return;
+
   let sources=[];
 
   try{
@@ -133,16 +184,21 @@ async function coverFallback(img){
 
   let next=sources.shift();
 
-  img.dataset.coverFallbacks=JSON.stringify(sources);
+  img.dataset.coverFallbacks=
+    JSON.stringify(sources);
 
   if(next){
     img.src=next;
     return
   }
 
-  let isbn=cleanIsbn(img.dataset.isbn||'');
+  let isbn=cleanIsbn(
+    img.dataset.isbn||''
+  );
 
   if(isbn){
+    img.dataset.coverBusy='1';
+
     try{
       let r=await fetch(
         `https://www.googleapis.com/books/v1/volumes?q=isbn:${encodeURIComponent(isbn)}&maxResults=5`
@@ -152,21 +208,27 @@ async function coverFallback(img){
 
       let image=(data.items||[])
         .map(x=>
-          x.volumeInfo?.imageLinks?.thumbnail ||
+          x.volumeInfo?.imageLinks?.thumbnail||
           x.volumeInfo?.imageLinks?.smallThumbnail
         )
         .find(Boolean);
 
       if(image){
+        img.dataset.coverBusy='0';
         img.src=image.replace(/^http:/,'https:');
         return
       }
     }catch{}
   }
 
-  let placeholder=document.createElement('div');
-  placeholder.className='cover-placeholder';
+  let placeholder=
+    document.createElement('div');
+
+  placeholder.className=
+    'cover-placeholder';
+
   placeholder.textContent='▤';
+
   img.replaceWith(placeholder)
 }
 
@@ -217,14 +279,14 @@ function render(){
 
   if(books.length&&visible.length===0){
     $('#emptyState').hidden=false;
-    $('#emptyState h3').textContent='No encontramos libros';
+    $('#emptyState h3').textContent=
+      'No encontramos libros';
     $('#emptyState p').textContent=
       'Probá con menos palabras o con otro filtro.'
   }
   else if(!books.length){
     $('#emptyState h3').textContent=
       'Tu biblioteca está vacía';
-
     $('#emptyState p').textContent=
       'Escaneá el primer ISBN y tus libros aparecerán acá.'
   }
@@ -256,7 +318,11 @@ function card(b){
     : '';
 
   return `
-    <article class="book-card">
+    <article
+      class="book-card"
+      data-open-edit="${b.id}"
+      tabindex="0"
+    >
       <div>${cover(b)}</div>
 
       <div class="book-info">
@@ -300,7 +366,10 @@ function card(b){
             Editar lectura
           </button>
 
-          <button data-delete="${b.id}">
+          <button
+            class="delete-btn"
+            data-delete="${b.id}"
+          >
             Borrar
           </button>
 
@@ -333,11 +402,17 @@ async function lookupISBN(raw){
   let isbn=cleanIsbn(raw);
 
   if(!isbn||![10,13].includes(isbn.length)){
-    showToast('El ISBN debe tener 10 o 13 dígitos.');
+    showToast(
+      'El ISBN debe tener 10 o 13 dígitos.'
+    );
     return
   }
 
-  setScannerStatus('Buscando datos del libro…');
+  clearLookupAlert();
+
+  setScannerStatus(
+    'Buscando datos del libro…'
+  );
 
   try{
     let r=await fetch(
@@ -404,7 +479,10 @@ async function lookupISBN(raw){
       .replace(/\s+/g,' ')
       .trim();
 
-    let title=d.title||wd.title||'Sin título';
+    let title=
+      d.title||
+      wd.title||
+      'Sin título';
 
     let googleCover='';
 
@@ -485,17 +563,15 @@ async function lookupISBN(raw){
         'Open Library no lo encontró. Probando otra fuente…'
       );
 
-      pendingBook=await lookupGoogleBooks(isbn);
+      pendingBook=
+        await lookupGoogleBooks(isbn);
 
       showBookPreview();
       closeDialog('scannerDialog');
       $('#bookDialog').showModal()
 
     }catch{
-      setScannerStatus('');
-      showToast(
-        'No encontramos ese ISBN en las fuentes consultadas.'
-      )
+      showNotFound(isbn)
     }
   }
 }
@@ -549,7 +625,8 @@ async function lookupGoogleBooks(isbn){
 
     pages:v.pageCount||0,
 
-    cover:image.replace(/^http:/,'https:'),
+    cover:
+      image.replace(/^http:/,'https:'),
 
     coverCandidates:[
       `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg`,
@@ -574,14 +651,17 @@ function showBookPreview(){
     <div class="preview-copy">
       <h3>${esc(b.title)}</h3>
       <p>${esc(b.author)}</p>
+
       <p>
         ${esc(b.year||'Año no disponible')}
         ·
         ${esc(b.genre)}
       </p>
+
       <p>
         ${esc(
-          (b.description||'Sin descripción disponible.')
+          (b.description||
+          'Sin descripción disponible.')
           .slice(0,240)
         )}
       </p>
@@ -595,8 +675,14 @@ function setScannerStatus(t){
 
 async function startScanner(){
   try{
+    clearManualInput();
+    clearLookupAlert();
+
     $('#scannerDialog').showModal();
-    setScannerStatus('Buscando un código de barras…');
+
+    setScannerStatus(
+      'Buscando un código de barras…'
+    );
 
     stream=await navigator.mediaDevices.getUserMedia({
       video:{
@@ -622,14 +708,19 @@ async function startScanner(){
       scanLock=false;
 
       const loop=async()=>{
-        if(!$('#scannerDialog').open||scanLock)return;
+        if(!$('#scannerDialog').open||scanLock){
+          return
+        }
 
         try{
-          let codes=await detector.detect($('#video'));
+          let codes=
+            await detector.detect($('#video'));
 
           if(codes[0]?.rawValue){
             scanLock=true;
-            await lookupISBN(codes[0].rawValue);
+            await lookupISBN(
+              codes[0].rawValue
+            );
             return
           }
         }catch{}
@@ -653,7 +744,10 @@ async function startScanner(){
 
 function stopScanner(){
   if(stream){
-    stream.getTracks().forEach(t=>t.stop());
+    stream.getTracks().forEach(
+      t=>t.stop()
+    );
+
     stream=null
   }
 
@@ -665,7 +759,9 @@ function closeDialog(id){
 
   if(d.open)d.close();
 
-  if(id==='scannerDialog')stopScanner()
+  if(id==='scannerDialog'){
+    stopScanner()
+  }
 }
 
 function savePending(andScan=false){
@@ -681,12 +777,16 @@ function savePending(andScan=false){
     );
 
     pendingBook=null;
+    clearManualInput();
     closeDialog('bookDialog');
     return
   }
 
   books.unshift(pendingBook);
   pendingBook=null;
+
+  clearManualInput();
+
   save();
   closeDialog('bookDialog');
 
@@ -732,13 +832,15 @@ function renderRecommendations(searchText=''){
       ? `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=8`
       : `https://openlibrary.org/search.json?subject=${encodeURIComponent(genre)}&limit=8`;
 
-    $('#recommendations .eyebrow').textContent=query
-      ? 'RESULTADOS PARECIDOS'
-      : 'A PARTIR DE TUS GÉNEROS';
+    $('#recommendations .eyebrow').textContent=
+      query
+        ? 'RESULTADOS PARECIDOS'
+        : 'A PARTIR DE TUS GÉNEROS';
 
-    $('#recommendations h2').textContent=query
-      ? '¿Buscabas alguno de estos?'
-      : 'Podría interesarte';
+    $('#recommendations h2').textContent=
+      query
+        ? '¿Buscabas alguno de estos?'
+        : 'Podría interesarte';
 
     fetch(endpoint)
       .then(r=>r.json())
@@ -821,15 +923,22 @@ function openEdit(id){
 $('#scanBtn').onclick=startScanner;
 
 $('#manualBtn').onclick=()=>{
+  clearManualInput();
+  clearLookupAlert();
+
   $('#scannerDialog').showModal();
+
   setScannerStatus(
     'Escribí un ISBN para buscarlo.'
   );
+
   $('#manualInput').focus()
 };
 
 $('#manualLookupBtn').onclick=()=>{
-  lookupISBN($('#manualInput').value)
+  lookupISBN(
+    $('#manualInput').value
+  )
 };
 
 $('#manualInput').addEventListener(
@@ -874,7 +983,9 @@ $('#importFile').onchange=e=>{
     try{
       let incoming=JSON.parse(r.result);
 
-      if(!Array.isArray(incoming))throw Error();
+      if(!Array.isArray(incoming)){
+        throw Error()
+      }
 
       books=[
         ...incoming,
@@ -886,7 +997,9 @@ $('#importFile').onchange=e=>{
       save();
       showToast('Copia importada.')
     }catch{
-      showToast('Ese archivo no es válido.')
+      showToast(
+        'Ese archivo no es válido.'
+      )
     }
   };
 
@@ -896,7 +1009,9 @@ $('#importFile').onchange=e=>{
 $('#editForm').onsubmit=e=>{
   e.preventDefault();
 
-  let b=books.find(x=>x.id===editingId);
+  let b=books.find(
+    x=>x.id===editingId
+  );
 
   if(b){
     b.status=$('#editStatus').value;
@@ -907,7 +1022,10 @@ $('#editForm').onsubmit=e=>{
 
     save();
     closeDialog('editDialog');
-    showToast('Seguimiento actualizado.')
+
+    showToast(
+      'Seguimiento actualizado.'
+    )
   }
 };
 
@@ -915,69 +1033,11 @@ document.addEventListener('click',e=>{
   let edit=e.target.closest('[data-edit]');
   let fav=e.target.closest('[data-fav]');
   let del=e.target.closest('[data-delete]');
+  let cardEl=e.target.closest('[data-open-edit]');
   let close=e.target.closest('[data-close]');
 
   if(edit){
     openEdit(edit.dataset.edit)
   }
 
-  if(fav){
-    let b=books.find(
-      x=>x.id===fav.dataset.fav
-    );
-
-    if(b){
-      b.favorite=!b.favorite;
-      b.updatedAt=Date.now();
-      save()
-    }
-  }
-
-  if(del){
-    deleteBook(del.dataset.delete)
-  }
-
-  if(close){
-    closeDialog(close.dataset.close)
-  }
-});
-
-$$('.filter').forEach(b=>{
-  b.onclick=()=>{
-    $$('.filter').forEach(x=>
-      x.classList.remove('active')
-    );
-
-    b.classList.add('active');
-    activeFilter=b.dataset.filter;
-    render()
-  }
-});
-
-$('#clearBtn').onclick=()=>{
-  if(confirm(
-    '¿Borrar todos los libros? Esta acción no se puede deshacer.'
-  )){
-    books=[];
-    save();
-    closeDialog('settingsDialog');
-    showToast('Biblioteca borrada.')
-  }
-};
-
-function exportData(){
-  let blob=new Blob(
-    [JSON.stringify(books,null,2)],
-    {type:'application/json'}
-  );
-
-  let a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='mi-biblioteca-copia.json';
-  a.click();
-
-  URL.revokeObjectURL(a.href);
-  showToast('Copia descargada.')
-}
-
-render();
+  if(fa
