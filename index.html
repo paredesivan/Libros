@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f5f1e8">
+  <meta name="description" content="Biblioteca personal: escaneá, guardá y seguí tus libros.">
+  <title>Mi biblioteca</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;700&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">▤</span><span>mi biblioteca</span></div>
+    <button id="settingsBtn" class="icon-btn" aria-label="Abrir ajustes">⚙</button>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <p class="eyebrow">CATÁLOGO PERSONAL</p>
+      <h1>Los libros que<br><em>te están formando.</em></h1>
+      <p class="hero-copy">Escaneá un ISBN, confirmá y seguí leyendo desde donde lo dejaste.</p>
+      <button id="scanBtn" class="primary-btn scan-cta"><span>▣</span> Escanear ISBN</button>
+      <div class="quick-actions">
+        <button id="manualBtn" class="text-btn">＋ Cargar ISBN manual</button>
+        <button id="importBtn" class="text-btn">↥ Importar copia</button>
+        <input id="importFile" type="file" accept="application/json" hidden>
+      </div>
+    </section>
+
+    <section class="stats" aria-label="Resumen de biblioteca">
+      <div><strong id="totalCount">0</strong><span>libros</span></div>
+      <div><strong id="readingCount">0</strong><span>leyendo</span></div>
+      <div><strong id="toReadCount">0</strong><span>por leer</span></div>
+    </section>
+
+    <section class="library-section">
+      <div class="section-heading"><div><p class="eyebrow">TU COLECCIÓN</p><h2>Biblioteca</h2></div><button id="exportBtn" class="small-btn">Exportar</button></div>
+      <div class="search-wrap"><span>⌕</span><input id="searchInput" type="search" placeholder="Buscar por título, autor, ISBN o género…" autocomplete="off"></div>
+      <div class="filters" role="group" aria-label="Filtros de libros">
+        <button class="filter active" data-filter="all">Todos</button><button class="filter" data-filter="reading">Leyendo</button><button class="filter" data-filter="to-read">Por leer</button><button class="filter" data-filter="favorites">★ Favoritos</button>
+      </div>
+      <div id="bookList" class="book-list"></div>
+      <div id="emptyState" class="empty-state"><div class="empty-icon">▤</div><h3>Tu biblioteca está vacía</h3><p>Escaneá el primer ISBN y tus libros aparecerán acá.</p></div>
+    </section>
+
+    <section id="recommendations" class="recommendations" hidden>
+      <div class="section-heading"><div><p class="eyebrow">A PARTIR DE TUS GÉNEROS</p><h2>Podría interesarte</h2></div></div>
+      <div id="recommendationList" class="recommendation-list"></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status"></div>
+
+  <dialog id="scannerDialog" class="modal scanner-modal">
+    <div class="modal-head"><div><p class="eyebrow">LECTOR DE ISBN</p><h2>Apuntá al código</h2></div><button class="close-btn" data-close="scannerDialog">×</button></div>
+    <div class="video-frame"><video id="video" playsinline muted></video><div class="scan-line"></div><div class="scan-corners"></div></div>
+    <p id="scannerStatus" class="modal-note">Buscando un código de barras…</p>
+    <div class="manual-row"><input id="manualInput" inputmode="numeric" placeholder="También podés escribir el ISBN"><button id="manualLookupBtn" class="small-btn">Buscar</button></div>
+    <button class="text-btn" data-close="scannerDialog">Cerrar lector</button>
+  </dialog>
+
+  <dialog id="bookDialog" class="modal">
+    <div class="modal-head"><div><p class="eyebrow">NUEVO LIBRO</p><h2>¿Lo guardamos?</h2></div><button class="close-btn" data-close="bookDialog">×</button></div>
+    <div id="bookPreview" class="book-preview"></div>
+    <div class="modal-actions"><button id="confirmBookBtn" class="primary-btn">Guardar libro</button><button id="scanNextBtn" class="secondary-btn">Guardar y escanear otro</button></div>
+  </dialog>
+
+  <dialog id="editDialog" class="modal">
+    <div class="modal-head"><div><p class="eyebrow">SEGUIMIENTO</p><h2 id="editTitle">Editar libro</h2></div><button class="close-btn" data-close="editDialog">×</button></div>
+    <form id="editForm" class="edit-form">
+      <label>Estado<select id="editStatus"><option value="to-read">Por leer</option><option value="reading">Leyendo</option><option value="finished">Terminado</option></select></label>
+      <label>Página actual <span class="label-hint" id="pageHint"></span><input id="editPage" type="number" min="0" inputmode="numeric"></label>
+      <label class="check-label"><input id="editFavorite" type="checkbox"> Marcar como favorito</label>
+      <label>Notas de lectura<textarea id="editNotes" rows="5" placeholder="Ideas, citas, preguntas…"></textarea></label>
+      <button class="primary-btn" type="submit">Guardar cambios</button>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog" class="modal">
+    <div class="modal-head"><div><p class="eyebrow">DATOS</p><h2>Tu biblioteca</h2></div><button class="close-btn" data-close="settingsDialog">×</button></div>
+    <p class="modal-note">Los datos se guardan en este navegador. Exportá una copia para conservarlos o pasarlos a otro teléfono.</p>
+    <button id="settingsExportBtn" class="secondary-btn">↥ Descargar copia JSON</button>
+    <button id="clearBtn" class="danger-btn">Borrar todos los libros</button>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
