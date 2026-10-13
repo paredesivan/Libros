@@ -6,7 +6,7 @@ function loadBooks(){try{return JSON.parse(localStorage.getItem(STORE_KEY)||'[]'
 
 function save(){
   localStorage.setItem(STORE_KEY,JSON.stringify(books));
-  render();
+  render()
 }
 
 function uid(){
@@ -41,7 +41,8 @@ function fuzzy(needle,hay){
 
   return needle.split(' ').every(q=>
     hay.split(' ').some(w=>
-      w.startsWith(q)||lev(q,w)<=Math.max(1,Math.floor(q.length/3))
+      w.startsWith(q) ||
+      lev(q,w)<=Math.max(1,Math.floor(q.length/3))
     )
   )
 }
@@ -114,15 +115,19 @@ function render(){
     .filter(b=>{
       let f=
         activeFilter==='all' ||
-        (activeFilter==='favorites'?b.favorite:b.status===activeFilter);
+        (activeFilter==='favorites'
+          ? b.favorite
+          : b.status===activeFilter);
 
       return f&&fuzzy(q,bookText(b))
     })
     .sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
 
-  $('#emptyState').hidden=visible.length>0||books.length>0;
+  $('#emptyState').hidden=
+    visible.length>0||books.length>0;
 
-  $('#bookList').innerHTML=visible.map(card).join('');
+  $('#bookList').innerHTML=
+    visible.map(card).join('');
 
   if(books.length&&visible.length===0){
     $('#emptyState').hidden=false;
@@ -130,12 +135,14 @@ function render(){
     $('#emptyState p').textContent=
       'Probá con menos palabras o con otro filtro.'
   }else if(!books.length){
-    $('#emptyState h3').textContent='Tu biblioteca está vacía';
+    $('#emptyState h3').textContent=
+      'Tu biblioteca está vacía';
+
     $('#emptyState p').textContent=
       'Escaneá el primer ISBN y tus libros aparecerán acá.'
   }
 
-  renderRecommendations();
+  renderRecommendations(q);
 }
 
 function card(b){
@@ -154,14 +161,17 @@ function card(b){
       <div>${cover(b)}</div>
 
       <div class="book-info">
-        <h3 class="book-title">${esc(b.title||'Sin título')}</h3>
+        <h3 class="book-title">
+          ${esc(b.title||'Sin título')}
+        </h3>
 
         <p class="book-author">
           ${esc(b.author||'Autor desconocido')}
         </p>
 
         <div class="book-meta">
-          ${esc(b.year||'s/f')} · ${esc(b.genre||'Sin género')}
+          ${esc(b.year||'s/f')} ·
+          ${esc(b.genre||'Sin género')}
         </div>
 
         <span class="status-pill ${b.status==='finished'?'finished':''}">
@@ -430,11 +440,13 @@ function savePending(andScan=false){
   }
 }
 
-function renderRecommendations(){
+let recommendationTimer;
+
+function renderRecommendations(searchText=''){
   let rec=$('#recommendations');
   let list=$('#recommendationList');
 
-  if(!books.length){
+  if(!books.length&&!searchText.trim()){
     rec.hidden=true;
     return
   }
@@ -443,83 +455,101 @@ function renderRecommendations(){
     .flatMap(b=>b.genres?.length?b.genres:[b.genre])
     .filter(Boolean)[0];
 
-  if(!genre){
+  if(!genre&&!searchText){
     rec.hidden=true;
     return
   }
 
-  fetch(
-    `https://openlibrary.org/search.json?subject=${encodeURIComponent(genre)}&limit=6`
-  )
-  .then(r=>r.json())
-  .then(data=>{
-    let owned=new Set(
-      books.map(b=>norm(b.title))
-    );
+  clearTimeout(recommendationTimer);
 
-    let items=(data.docs||[])
-      .filter(x=>x.title&&!owned.has(norm(x.title)))
-      .slice(0,4);
+  recommendationTimer=setTimeout(()=>{
+    let query=searchText.trim();
 
-    list.innerHTML=items.map(x=>{
-      let isbn=x.isbn?.[0];
+    let endpoint=query
+      ? `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=8`
+      : `https://openlibrary.org/search.json?subject=${encodeURIComponent(genre)}&limit=8`;
 
-      let c=isbn
-        ? `https://covers.openlibrary.org/isbn/${isbn}-M.jpg`
-        :'';
+    $('#recommendations .eyebrow').textContent=query
+      ? 'RESULTADOS PARECIDOS'
+      : 'A PARTIR DE TUS GÉNEROS';
 
-      let q=encodeURIComponent(
-        `${x.title} ${x.author_name?.[0]||''}`
-      );
+    $('#recommendations h2').textContent=query
+      ? '¿Buscabas alguno de estos?'
+      : 'Podría interesarte';
 
-      return `
-        <article class="recommendation-card">
-          ${
-            c
-            ? `<img class="cover" src="${c}" alt="">`
-            :''
-          }
+    fetch(endpoint)
+      .then(r=>r.json())
+      .then(data=>{
+        let owned=new Set(
+          books.map(b=>norm(b.title))
+        );
 
-          <h3 class="book-title">
-            ${esc(x.title)}
-          </h3>
+        let items=(data.docs||[])
+          .filter(x=>
+            x.title&&!owned.has(norm(x.title))
+          )
+          .slice(0,4);
 
-          <p class="book-author">
-            ${esc(x.author_name?.[0]||'')}
-          </p>
+        list.innerHTML=items.map(x=>{
+          let isbn=x.isbn?.[0];
 
-          <div class="buy-links">
-            <a
-              target="_blank"
-              rel="noopener"
-              href="https://listado.mercadolibre.com.ar/${q}"
-            >
-              Mercado Libre
-            </a>
+          let c=isbn
+            ? `https://covers.openlibrary.org/isbn/${isbn}-M.jpg`
+            :'';
 
-            <a
-              target="_blank"
-              rel="noopener"
-              href="https://www.google.com/search?q=${q}+site%3Acuspide.com"
-            >
-              Cúspide
-            </a>
+          let buyQuery=encodeURIComponent(
+            `${x.title} ${x.author_name?.[0]||''}`
+          );
 
-            <a
-              target="_blank"
-              rel="noopener"
-              href="https://www.google.com/search?q=${q}+site%3Asbs.com.ar"
-            >
-              SBS
-            </a>
-          </div>
-        </article>
-      `
-    }).join('');
+          return `
+            <article class="recommendation-card">
+              ${
+                c
+                ? `<img class="cover" src="${c}" alt="">`
+                :''
+              }
 
-    rec.hidden=!items.length
-  })
-  .catch(()=>{})
+              <h3 class="book-title">
+                ${esc(x.title)}
+              </h3>
+
+              <p class="book-author">
+                ${esc(x.author_name?.[0]||'')}
+              </p>
+
+              <div class="buy-links">
+                <a
+                  target="_blank"
+                  rel="noopener"
+                  href="https://listado.mercadolibre.com.ar/${buyQuery}"
+                >
+                  Mercado Libre
+                </a>
+
+                <a
+                  target="_blank"
+                  rel="noopener"
+                  href="https://www.google.com/search?q=${buyQuery}+site%3Acuspide.com"
+                >
+                  Cúspide
+                </a>
+
+                <a
+                  target="_blank"
+                  rel="noopener"
+                  href="https://www.google.com/search?q=${buyQuery}+site%3Asbs.com.ar"
+                >
+                  SBS
+                </a>
+              </div>
+            </article>
+          `
+        }).join('');
+
+        rec.hidden=!items.length
+      })
+      .catch(()=>{})
+  },250)
 }
 
 function openEdit(id){
